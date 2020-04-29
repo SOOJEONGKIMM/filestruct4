@@ -2,6 +2,7 @@
 #include<string.h>
 #include<stdlib.h>
 #include"sectormap.h"
+#include<assert.h>
 
 //제출용은 아니고 테스트용으로 만드는 파일임.
 
@@ -15,7 +16,7 @@ void ftl_print();
 int main(int argc, char *argv[]){
     char *blockbuf;
     char sectorbuf[SECTOR_SIZE];
-    int lsn, i;
+    int i;
 
     if((flashfp=fopen("flashmemory","w+b"))<0){
 	fprintf(stderr,"fopen error\n");
@@ -31,14 +32,21 @@ int main(int argc, char *argv[]){
 
 //read write전에 항상 호출됨.
     ftl_open();
-    ftl_write(7,"a");
-    ftl_read(7,sectorbuf);
-    ftl_write(4,"b");
-    ftl_write(7,"c");
+    ftl_write(3,"aaaaa");
+    ftl_read(3,sectorbuf);
     ftl_print();
-    printf("============\n");
-    ftl_write(8,"d");
+    ftl_write(4,"b");
+    ftl_write(0,"bb");
+    //ftl_read(0,sectorbuf);
+    ftl_write(2,"c");
+    ftl_print();
+    printf("\n============\n");
+    ftl_write(1,"d");
+    ftl_write(7,"ee");
+    ftl_write(8,"ddd");
+    ftl_print();
     
+
     fclose(flashfp);
 
     return 0;
