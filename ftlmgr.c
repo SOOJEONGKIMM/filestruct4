@@ -14,13 +14,14 @@ int dd_read(int ppn, char *pagebuf);
 int dd_write(int ppn, char *pagebuf);
 int dd_erase(int pbn);
 
-int addTable[1][BLOCKS_PER_DEVICE];//address mapping table
+static int ** addTable;
+//[1][BLOCKS_PER_DEVICE];//address mapping table
 int free_block;
-typedef struct _list{
+/*typedef struct _list{
     struct _node *head;
     struct _node *tail;
 }linkedlist;
-
+*/
 typedef struct garbage{//linked list for garbage block list
     int gdata;
     struct garbage *next;
@@ -31,17 +32,21 @@ typedef struct garbage{//linked list for garbage block list
 //
 void ftl_open()
 {
-    memset(addTable,0xFF,sizeof(addTable));
-    for(int i=0;i<DATABLKS_PER_DEVICE;i++){
+    addTable=(int**)malloc(sizeof(int*)*2);
+    addTable[0]=(int*)malloc(sizeof(int)*BLOCKS_PER_DEVICE);
+    addTable[1]=(int*)malloc(sizeof(int)*BLOCKS_PER_DEVICE);
+    
+    for(int i=0;i<BLOCKS_PER_DEVICE;i++){
+	addTable[1][i]=0xFF;//initialize pbn with 0xFF
 	addTable[0][i]=i;//lbn index 순서대로 채우기.
     }    
-    free_block=DATABLKS_PER_DEVICE;//flashmemory가 full인경우대비해서 freeblock이 마지막에존재.
+    
+    free_block=DATABLKS_PER_DEVICE;
+    //flashmemory가 full인경우대비해서 freeblock이 마지막에존재.
+    
     addTable[1][free_block]=DATABLKS_PER_DEVICE;
-    //가장마지막블록을 freeblock pbn로 지정,pbn initialize
+    //가장마지막블록을 freeblock pbn로 지정
 
-    //garbage block linked list 생성
-    linkedlist *head=(linkedlist *)malloc(sizeof(linkedlist));//head node
-    head->next=NULL;
     
 	// address mapping table 초기화
 	// free block's pbn 초기화
@@ -77,7 +82,6 @@ void ftl_read(int lsn, char *sectorbuf)
 
 void ftl_write(int lsn, char *sectorbuf)
 {
-    char sectorbuf[SECTOR_SIZE];
     char sparebuf[SPARE_SIZE];
     char pagebuf[PAGE_SIZE];
     char *blockbuf;
@@ -101,10 +105,9 @@ void ftl_write(int lsn, char *sectorbuf)
 	dd_write(ppn,pagebuf);
 	fclose(flashfp);
 	exit(0);
-    }	
-    //pbn 이미 할당되었고 페이지에 이미 데이터 존재한다면 update로 갱신
-    int fppn=0;//freeblock위치사용위해 
-    else if(pbn!=-1){//finding freeblock...플래그로 표시
+    }//pbn 이미 할당되었고 페이지에 이미 데이터 존재한다면 update로 갱신
+    else{//finding freeblock...플래그로 표시
+	int fppn=0;//freeblock위치사용위해 
 	exist=1;
 	ppn=pbn*PAGES_PER_BLOCK+remain;
 	while(fseek(flashfp,0,SEEK_CUR)==0){
@@ -147,20 +150,31 @@ void ftl_write(int lsn, char *sectorbuf)
 	//(while문 다 돌았는데 여전히 못 찾음)
 	//flashmemory이 다 차서 freeblock이 없는 경우라 garbage block할당필요
 	if((exist==1)&&(pbn!=-1)){
+	    /*//garbage block linked list 생성
+	    linkedlist *L=(linkedlist *)malloc(sizeof(linkedlist));
+	    L->head=NULL;
+	    L->tail=NULL;
+	    */
 	    //garbage node 생성
+	    
+	    node *head=(node*)malloc(sizeof(node));
+	    head->next=NULL;
+
 	    node *newnode=(node*)malloc(sizeof(node));
 	    newnode->gdata=pbn;
 	    newnode->next=head->next;//head의 다음노드에 newnode주소저장
 	    head->next=newnode;
 
+	    /*
 	    //garbage block 연결리스트에 연결
-	    if(linkedlist->head==NULL && linkedlist->tail==NULL){
-		linkedlist->head=linkedlist->tail=newnode;
+	    if(L->head==NULL && L->tail==NULL){
+		L->head=newnode;
+		L->tail=newnode;
 	    }
 	    else{
-		linkedlist->tail->next=newnode;
-		linkedlist->tail=newnode;
-	    }
+		L->tail->next=newnode;
+		L->tail=newnode;
+	    }*/
 
 	    ppn=pbn*PAGES_PER_BLOCK+remain;
 	   //lsn(lpn)을 spare에 저장하는이유는 ppn이 lpn에 매핑되어있단걸 표현하기 위한것.
@@ -170,16 +184,20 @@ void ftl_write(int lsn, char *sectorbuf)
 	    memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,strlen((char*)sparebuf));
 	    dd_write(ppn,pagebuf);
 
-	    //write완료후에 garbage node삭제 
-	    newnode=linkedlist->head;
+	    /*//write완료후에 garbage node삭제 
+	    newnode=L->head;
 	    while(newnode->next->next!=NULL)//마지막노드 삭제 
 		newnode=newnode->next;
 	    newnode->next=newnode->next->next;
-	    linkedlist->tail=newnode;
+	    L->tail=newnode;*/
+
+	    free(head);
+	    free(newnode);
 
 	    fclose(flashfp);
 	    return;
 	}
+    }
 
 	return;
 }
@@ -188,7 +206,7 @@ void ftl_print()
 {
     printf("lpn ppn\n");
     for(int i=0;i<BLOCKS_PER_DEVICE;i++){
-	printf("%d  %d\n",lpn,ppn);
+	printf("%d  %d\n",i,addTable[1][i]);
     }
     printf("free block's pbn=%d",addTable[1][free_block]);
 
