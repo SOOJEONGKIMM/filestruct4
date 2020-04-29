@@ -16,6 +16,15 @@ int dd_erase(int pbn);
 
 int addTable[1][BLOCKS_PER_DEVICE];//address mapping table
 int free_block;
+typedef struct _list{
+    struct _node *head;
+    struct _node *tail;
+}linkedlist;
+
+typedef struct garbage{//linked list for garbage block list
+    int gdata;
+    struct garbage *next;
+}node;
 // flash memory를 처음 사용할 때 필요한 초기화 작업, 예를 들면 address mapping table에 대한
 // 초기화 등의 작업을 수행한다. 따라서, 첫 번째 ftl_write() 또는 ftl_read()가 호출되기 전에
 // file system에 의해 반드시 먼저 호출이 되어야 한다.
@@ -27,17 +36,17 @@ void ftl_open()
 	addTable[0][i]=i;//lbn index 순서대로 채우기.
     }    
     free_block=DATABLKS_PER_DEVICE;//flashmemory가 full인경우대비해서 freeblock이 마지막에존재.
-    addTable[1][free_block]=0xFF;//가장마지막블록을 freeblock pbn로 지정,pbn initialize
-	//
+    addTable[1][free_block]=DATABLKS_PER_DEVICE;
+    //가장마지막블록을 freeblock pbn로 지정,pbn initialize
+
+    //garbage block linked list 생성
+    linkedlist *head=(linkedlist *)malloc(sizeof(linkedlist));//head node
+    head->next=NULL;
+    
 	// address mapping table 초기화
 	// free block's pbn 초기화
     	// address mapping table에서 lbn 수는 DATABLKS_PER_DEVICE 동일
 
-    //debug
-    for(int i=0;i<BLOCKS_PER_DEVICE;i++){
-    printf("%d",addTable[0][i]);
-    printf("%d",addTable[1][i]);
-    }
     return;
 }
 
@@ -50,6 +59,11 @@ void ftl_read(int lsn, char *sectorbuf)
     char pagebuf[PAGE_SIZE];
     int ppn;
     int lbn=lsn/PAGES_PER_BLOCK; //quotient
+    int pbn=addTable[1][lbn];
+    if(pbn=-1){
+	fprintf(stderr,"empty block\n");
+	exit(1);
+    }
     //lpn=lsn동일.
     int remain=lsn%PAGES_PER_BLOCK; //remainder
     memset(pagebuf,0xFF,PAGE_SIZE);
@@ -63,7 +77,109 @@ void ftl_read(int lsn, char *sectorbuf)
 
 void ftl_write(int lsn, char *sectorbuf)
 {
+    char sectorbuf[SECTOR_SIZE];
+    char sparebuf[SPARE_SIZE];
+    char pagebuf[PAGE_SIZE];
+    char *blockbuf;
+    int ppn;
+    int lbn=lsn/PAGES_PER_BLOCK;
+    int remain=lsn%PAGES_PER_BLOCK;
+    int pbn=addTable[1][lbn];
+    int exist=1;//freeblock인지아닌지 판단위한 플래그//***매핑해서 사실상 필요없을듯..
 
+    dd_read(ppn, pagebuf);
+
+    
+    //최초 쓰기 작업 수행인 경우(free block) 
+    if(pbn==-1){//pbn 할당 전
+	exist=0;
+	ppn=pbn*PAGES_PER_BLOCK+remain;
+	sparebuf[lsn]=lsn;//lsn(lpn)을 spare에 저장하는이유는 ppn이 lpn에 매핑되어있단걸 표현하기 위한것.
+	//인자로 받은 sectorbuf pagebuf에 복사
+        memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
+	memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,strlen((char*)sparebuf));
+	dd_write(ppn,pagebuf);
+	fclose(flashfp);
+	exit(0);
+    }	
+    //pbn 이미 할당되었고 페이지에 이미 데이터 존재한다면 update로 갱신
+    int fppn=0;//freeblock위치사용위해 
+    else if(pbn!=-1){//finding freeblock...플래그로 표시
+	exist=1;
+	ppn=pbn*PAGES_PER_BLOCK+remain;
+	while(fseek(flashfp,0,SEEK_CUR)==0){
+	    for(int i=0;i<PAGES_PER_BLOCK;i++){
+		dd_read(fppn*PAGES_PER_BLOCK+i,pagebuf);
+		exist=0;
+		for(int j=0;j<PAGES_PER_BLOCK;j++){
+		    if(sparebuf[lsn]!=-1){//이미 매핑된경우
+			exist=1;
+			break;
+		    }
+		}
+		if(exist==1)
+		    break;
+	    }
+	    //free block찾은 후 기존데이터를 free block에 백업
+	    //또한 아직 매핑되지않은 ppn인 경우 
+	    if((exist==0)&&(sparebuf[lsn]==-1)){
+	    	dd_read(ppn,pagebuf);//read
+		dd_write(fppn,pagebuf);//freeblock write
+	    
+		dd_erase(ppn);//기존데이터 기존자리에서 erase.
+
+		//recopy and erase
+		dd_read(fppn,pagebuf);//freeblock에서 백업데이터 read 
+		//lsn(lpn)을 spare에 저장하는이유는 ppn이 lpn에 매핑되어있단걸 표현하기 위한것.
+		sparebuf[lsn]=lsn;
+		//인자로 받은 sectorbuf pagebuf에 복사
+		memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
+		memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,strlen((char*)sparebuf));
+		dd_write(ppn,pagebuf);//써야할자리에 write
+		dd_erase(fppn);//freeblock에 했던 백업데이터 erase.
+		fclose(flashfp);
+		return;
+	    }
+	    //free block아니면 계속 찾기
+	    else
+		fppn++;
+	}
+	//(while문 다 돌았는데 여전히 못 찾음)
+	//flashmemory이 다 차서 freeblock이 없는 경우라 garbage block할당필요
+	if((exist==1)&&(pbn!=-1)){
+	    //garbage node 생성
+	    node *newnode=(node*)malloc(sizeof(node));
+	    newnode->gdata=pbn;
+	    newnode->next=head->next;//head의 다음노드에 newnode주소저장
+	    head->next=newnode;
+
+	    //garbage block 연결리스트에 연결
+	    if(linkedlist->head==NULL && linkedlist->tail==NULL){
+		linkedlist->head=linkedlist->tail=newnode;
+	    }
+	    else{
+		linkedlist->tail->next=newnode;
+		linkedlist->tail=newnode;
+	    }
+
+	    ppn=pbn*PAGES_PER_BLOCK+remain;
+	   //lsn(lpn)을 spare에 저장하는이유는 ppn이 lpn에 매핑되어있단걸 표현하기 위한것.
+	    sparebuf[lsn]=lsn;
+	    //인자로 받은 sectorbuf pagebuf에 복사
+	    memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
+	    memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,strlen((char*)sparebuf));
+	    dd_write(ppn,pagebuf);
+
+	    //write완료후에 garbage node삭제 
+	    newnode=linkedlist->head;
+	    while(newnode->next->next!=NULL)//마지막노드 삭제 
+		newnode=newnode->next;
+	    newnode->next=newnode->next->next;
+	    linkedlist->tail=newnode;
+
+	    fclose(flashfp);
+	    return;
+	}
 
 	return;
 }
