@@ -32,12 +32,14 @@ node *cur_node;
 //
 void ftl_open()
 {
-    addTable=(int**)malloc(sizeof(int*)*2);
+    addTable=(int**)malloc(sizeof(int*)*3);
     addTable[0]=(int*)malloc(sizeof(int)*DATABLKS_PER_DEVICE*PAGES_PER_BLOCK);
     addTable[1]=(int*)malloc(sizeof(int)*DATABLKS_PER_DEVICE*PAGES_PER_BLOCK);
+    addTable[2]=(int*)malloc(sizeof(int)*DATABLKS_PER_DEVICE*PAGES_PER_BLOCK);
     
     for(int i=0;i<DATABLKS_PER_DEVICE*PAGES_PER_BLOCK;i++){
 	addTable[1][i]=-1;//initialize pbn with 0xFF
+	addTable[2][i]=-1;//initialize  with 0xFF
 	addTable[0][i]=i;//lbn index 순서대로 채우기.
     }    
     
@@ -112,7 +114,8 @@ void ftl_write(int lsn, char *sectorbuf)
 	//lpn=lbn*PAGES_PER_BLOCK+remain;
 	
 	//sparebuf[0]='1';
-	//itoa(lsn,sparebuf,10);
+//itoa(lsn,sparebuf,10);
+    memset(sparebuf,0xFF,SPARE_SIZE);
 	sprintf(sparebuf,"%d",lsn);
 	//sparebuf[0]=(char)lsn;//lsn(lpn)을 spare에 저장하는이유는 ppn이 lpn에 매핑되어있단걸 표현하기 위한것.
 //	memset(sparebuf,0xFF,SPARE_SIZE);
@@ -130,7 +133,7 @@ void ftl_write(int lsn, char *sectorbuf)
 	printf("FIRST WRITE IN FREEBLOCK\n");
 	return;
     }//ppn 이미 할당되었고 페이지에 이미 데이터 존재한다면 update로 갱신
-    else{//finding freeblock...플래그로 표시
+    else if(addTable[1][lsn]!=-1){//finding freeblock...플래그로 표시
 	printf("FINDING FREEBLOCK...\n");
 	int fppn=0;//freeblock위치사용위해 
 	exist=1;
@@ -139,7 +142,11 @@ void ftl_write(int lsn, char *sectorbuf)
 	memset((char*)sparebuf,0XFF,SPARE_SIZE);
 	memset((char*)tmppage,0xFF,PAGE_SIZE);
 	dd_read(psn-remain,tmppage); 
+	for(int i=0;i<PAGE_SIZE;i++)//debug
+	   printf("%d ",tmppage[i]);
 	memcpy((char*)sparebuf,(char*)(tmppage+SECTOR_SIZE),strlen((char*)sparebuf));
+	for(int i=0;i<SPARE_SIZE;i++)//debug
+	   printf("%d ",sparebuf[i]);
 	//spare에 있는 맵핑번호 확인하기 위해 복사.
 	memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
 	//memcpy((char*)sparebuf,(char*)(pagebuf+SECTOR_SIZE),SPARE_SIZE);
@@ -158,15 +165,17 @@ void ftl_write(int lsn, char *sectorbuf)
 	    }
 	    //free block찾은 후 기존데이터를 free block에 백업
 	    //또한 아직 매핑되지않은 ppn인 경우 
-	    if((exist==0)&&(!strcmp(sparebuf,"-1"))){
+	    //if((exist==0)&&(!strcmp(sparebuf,"-1"))){
+	    if(exist==0){
 		printf("FOUND FREEBLOCK AND WRITES\n");
 	    	//dd_read(ppn,pagebuf);//read
 		//sparebuf[psn]=-1;//old block 처리. 
 		int init=-1;
 		sprintf(sparebuf,"%d",init);
 		//sparebuf[0]="-1";
-		node *newnode=(node*)malloc(sizeof(node));
-		newnode->gdata=psn;
+		//node *newnode=(node*)malloc(sizeof(node));
+		//newnode->gdata=psn;
+		/*
 		if(head==NULL){
 		    head=newnode;
 		    cur_node=newnode;
@@ -176,7 +185,7 @@ void ftl_write(int lsn, char *sectorbuf)
 		    cur_node->next=newnode;
 		    cur_node=newnode;
 		    newnode->next=NULL;
-		}
+		}*/
 		dd_write(fppn,pagebuf);//freeblock write
 		cur_psn=fppn+1;
 		if(cur_psn==DATABLKS_PER_DEVICE*PAGES_PER_BLOCK)
@@ -187,6 +196,9 @@ void ftl_write(int lsn, char *sectorbuf)
 		//recopy and erase
 		//dd_read(fppn,pagebuf);//freeblock에서 백업데이터 read 
 		//lsn(lpn)을 spare에 저장하는이유는 ppn이 lpn에 매핑되어있단걸 표현하기 위한것.
+		psn = addTable[1][lsn];
+		addTable[2][psn]=0; // invlaid page
+		addTable[2][fppn]=1;
 		addTable[1][lsn]=fppn;
 		//sparebuf[fppn]=lsn;
 		sprintf(sparebuf,"%d",fppn);
@@ -206,7 +218,7 @@ void ftl_write(int lsn, char *sectorbuf)
 	}
 	//(while문 다 돌았는데 여전히 못 찾음)
 	//flashmemory이 다 차서 freeblock이 없는 경우라 garbage block할당필요
-	if((exist==1)&&(addTable[1][lbn]!=-1)){
+	if((exist==1)&&(addTable[1][lsn]!=-1)){
 	    printf("ENTERED GARBAGE\n");
 	    //garbage node 생성
 	    //***    psn=head->gdata;//bring ppn
@@ -214,36 +226,59 @@ void ftl_write(int lsn, char *sectorbuf)
 	    //if(head->next==NULL)
 		//free(head);
 	   // else
-		while(cur_node!=NULL && cur_node->next!=NULL)
+	   /*
+	    cur_node = head;
+	    while(cur_node!=NULL) {
 		    head=cur_node->next;
 		if(cur_node!=NULL)
 		    head->next=cur_node->next;
+	    }
 		
-		
-	    free(cur_node);
-
+	    free(cur_node);*/
 	    pbn=psn/PAGES_PER_BLOCK;
 	    ppn=pbn*PAGES_PER_BLOCK+remain;
-
-	    for(int i=0;i<PAGES_PER_BLOCK;i++){
-		if(ppn!=i){
-		dd_read(pbn*PAGES_PER_BLOCK+i,pagebuf);
-		dd_write(DATABLKS_PER_DEVICE*PAGES_PER_BLOCK+i,pagebuf);
+	    for(int j=0;j<DATABLKS_PER_DEVICE;j++){
+	    
+		for(int i=0;i<PAGES_PER_BLOCK;i++){
+		    //copy valid page
+		    if(addTable[2][j*PAGES_PER_BLOCK+i] ==1){
+			dd_read(pbn*PAGES_PER_BLOCK+i,pagebuf);
+			dd_write(DATABLKS_PER_DEVICE*PAGES_PER_BLOCK+i,pagebuf);
+		    }
 		}
-		else{
-		sparebuf[0]=(char)(DATABLKS_PER_DEVICE*PAGES_PER_BLOCK+i);
-		memset((char*)pagebuf,0xFF,PAGE_SIZE);
-		//인자로 받은 sectorbuf pagebuf에 복사
-		memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
-		memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,strlen((char*)sparebuf));
-		}	    
+
+		dd_erase(j);
+		for(int i=0;i<PAGES_PER_BLOCK;i++){
+		    //recopy valid page
+		    if(addTable[2][j*PAGES_PER_BLOCK+i] ==1){
+			dd_read(DATABLKS_PER_DEVICE*PAGES_PER_BLOCK+i,pagebuf);
+			dd_write(pbn*PAGES_PER_BLOCK+i,pagebuf);
+		    }
+		    if(addTable[2][j*PAGES_PER_BLOCK+i]==0)
+			addTable[2][j*PAGES_PER_BLOCK+i]=-1;
+		}
+
 	    }
-	    dd_erase(pbn);
-	    for(int i=0;i<PAGES_PER_BLOCK;i++){
-		dd_read(DATABLKS_PER_DEVICE*PAGES_PER_BLOCK+i,pagebuf);
-		dd_write(pbn*PAGES_PER_BLOCK+i,pagebuf);
+	    
+	    for(int i=0;i<PAGES_PER_BLOCK*DATABLKS_PER_DEVICE;i++){
+		if(addTable[2][i]==-1){
+		    psn = i;
+		}
 	    }
 	    addTable[1][psn]=lsn;
+	    addTable[2][lsn]=1;
+		    //sparebuf[0]=(char)(DATABLKS_PER_DEVICE*PAGES_PER_BLOCK+i);
+		    sprintf(sparebuf,"%d",lsn);
+		    memset((char*)pagebuf,0xFF,PAGE_SIZE);
+		    //인자로 받은 sectorbuf pagebuf에 복사
+		    memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
+		    memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,strlen((char*)sparebuf));
+		    
+//	    pbn=psn/PAGES_PER_BLOCK;
+//	    ppn=pbn*PAGES_PER_BLOCK+remain;
+//	    remain=lsn%PAGES_PER_BLOCK;
+    //	dd_write(pbn*PAGES_PER_BLOCK+i,pagebuf);
+	    dd_write(psn,pagebuf);
 	}
     }
 }
