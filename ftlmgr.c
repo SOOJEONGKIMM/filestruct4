@@ -17,7 +17,7 @@ int dd_erase(int pbn);
 static int ** addTable;
 //[1][BLOCKS_PER_DEVICE];//address mapping table
 int free_block;
-static int cur_psn=0;
+static int cur_psn;
 typedef struct garbage{//linked list for garbage block list
     int gdata;//ppn(psn)
     struct garbage *next;
@@ -43,6 +43,8 @@ void ftl_open()
     
     free_block=DATABLKS_PER_DEVICE;
      //flashmemory가 full인경우대비해서 freeblock이 마지막에존재.
+
+    cur_psn=0;
     
     //addTable[1][free_block]=DATABLKS_PER_DEVICE;
     //가장마지막블록을 freeblock pbn로 지정
@@ -95,28 +97,32 @@ void ftl_write(int lsn, char *sectorbuf)
     char *blockbuf;
     int lbn=lsn/PAGES_PER_BLOCK;
     int remain=lsn%PAGES_PER_BLOCK;
-    int psn=addTable[1][lsn];
+    //=addTable[1][lsn];
     int exist=1;//freeblock인지아닌지 판단위한 플래그//***매핑해서 사실상 필요없을듯..
-    int pbn,ppn;
+    int pbn,ppn,psn;
 
     //dd_read(ppn, pagebuf);
     memset((char*)pagebuf,0xFF,PAGE_SIZE);
     //memset((char*)sectorbuf,0xFF,SECTOR_SIZE);
     memset((char*)sparebuf,0xFF,SPARE_SIZE);
     
+    //cur_psn은 맵핑실행순서와 같음..
     //최초 쓰기 작업 수행인 경우(free block) 
-    if(psn==-1){//psn 할당 전
+    if(addTable[1][lsn]==-1){//psn 할당 전
 	exist=0;
 	//lpn=lbn*PAGES_PER_BLOCK+remain;
-	addTable[1][lsn]=cur_psn;
-	cur_psn++;
-	if(cur_psn==DATABLKS_PER_DEVICE*PAGES_PER_BLOCK)
-	    cur_psn=0;
+	
 	sparebuf[0]=lsn;//lsn(lpn)을 spare에 저장하는이유는 ppn이 lpn에 매핑되어있단걸 표현하기 위한것.
 	//인자로 받은 sectorbuf pagebuf에 복사
         memcpy((char*)pagebuf,(char*)sectorbuf,SECTOR_SIZE);
 	memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,SPARE_SIZE);
+	psn=cur_psn*PAGES_PER_BLOCK+remain;
 	dd_write(psn,pagebuf);
+
+	addTable[1][lsn]=cur_psn++;
+	if(cur_psn==DATABLKS_PER_DEVICE*PAGES_PER_BLOCK)
+	    cur_psn=0;
+	printf("HERE");
 	//fclose(flashfp);
 	return;
     }//ppn 이미 할당되었고 페이지에 이미 데이터 존재한다면 update로 갱신
@@ -192,7 +198,7 @@ void ftl_write(int lsn, char *sectorbuf)
 	}
 	//(while문 다 돌았는데 여전히 못 찾음)
 	//flashmemory이 다 차서 freeblock이 없는 경우라 garbage block할당필요
-	if((exist==1)&&(psn!=-1)){
+	if((exist==1)&&(addTable[1][lbn]!=-1)){
 	    //garbage node 생성
 	    //***    psn=head->gdata;//bring ppn
 	    //cur_node=head;
