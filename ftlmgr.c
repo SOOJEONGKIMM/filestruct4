@@ -118,28 +118,28 @@ void ftl_write(int lsn, char *sectorbuf)
 //	memset(sparebuf,0xFF,SPARE_SIZE);
 	//인자로 받은 sectorbuf pagebuf에 복사
         memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
-	memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,SPARE_SIZE);
+	memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,strlen((char*)sparebuf));
 	psn=cur_psn*PAGES_PER_BLOCK+remain;
 	dd_write(psn,pagebuf);
-	for(int i=0;i<PAGE_SIZE;i++)//debug
-	    printf("%d ",pagebuf[i]);
+	//for(int i=0;i<PAGE_SIZE;i++)//debug
+	 //  printf("%d ",pagebuf[i]);
 
 	addTable[1][lsn]=cur_psn++;
 	if(cur_psn==DATABLKS_PER_DEVICE*PAGES_PER_BLOCK)
 	    cur_psn=0;
-	printf("FIRST WRITE IN FREEBLOCK");
+	printf("FIRST WRITE IN FREEBLOCK\n");
 	return;
     }//ppn 이미 할당되었고 페이지에 이미 데이터 존재한다면 update로 갱신
     else{//finding freeblock...플래그로 표시
-	printf("FINDING FREEBLOCK...");
+	printf("FINDING FREEBLOCK...\n");
 	int fppn=0;//freeblock위치사용위해 
 	exist=1;
 	//spare에 적혀있는 맵핑번호 비교확인 위해 
 	char tmppage[PAGE_SIZE];
 	memset((char*)sparebuf,0XFF,SPARE_SIZE);
 	memset((char*)tmppage,0xFF,PAGE_SIZE);
-	dd_read(psn-remain,tmppage);
-	memcpy((char*)sparebuf,(char*)(tmppage+SECTOR_SIZE),SPARE_SIZE);
+	dd_read(psn-remain,tmppage); 
+	memcpy((char*)sparebuf,(char*)(tmppage+SECTOR_SIZE),strlen((char*)sparebuf));
 	//spare에 있는 맵핑번호 확인하기 위해 복사.
 	memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
 	//memcpy((char*)sparebuf,(char*)(pagebuf+SECTOR_SIZE),SPARE_SIZE);
@@ -159,7 +159,7 @@ void ftl_write(int lsn, char *sectorbuf)
 	    //free block찾은 후 기존데이터를 free block에 백업
 	    //또한 아직 매핑되지않은 ppn인 경우 
 	    if((exist==0)&&(!strcmp(sparebuf,"-1"))){
-		printf("FOUND FREEBLOCK AND WRITES");
+		printf("FOUND FREEBLOCK AND WRITES\n");
 	    	//dd_read(ppn,pagebuf);//read
 		//sparebuf[psn]=-1;//old block 처리. 
 		int init=-1;
@@ -189,7 +189,8 @@ void ftl_write(int lsn, char *sectorbuf)
 		//lsn(lpn)을 spare에 저장하는이유는 ppn이 lpn에 매핑되어있단걸 표현하기 위한것.
 		addTable[1][lsn]=fppn;
 		//sparebuf[fppn]=lsn;
-		sparebuf[0]=(char)fppn;
+		sprintf(sparebuf,"%d",fppn);
+		//sparebuf[0]=(char)fppn;
 		memset((char*)pagebuf,0XFF,PAGE_SIZE);
 		//인자로 받은 sectorbuf pagebuf에 복사
 		memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
@@ -206,7 +207,7 @@ void ftl_write(int lsn, char *sectorbuf)
 	//(while문 다 돌았는데 여전히 못 찾음)
 	//flashmemory이 다 차서 freeblock이 없는 경우라 garbage block할당필요
 	if((exist==1)&&(addTable[1][lbn]!=-1)){
-	    printf("ENTERED GARBAGE");
+	    printf("ENTERED GARBAGE\n");
 	    //garbage node 생성
 	    //***    psn=head->gdata;//bring ppn
 	    //cur_node=head;
