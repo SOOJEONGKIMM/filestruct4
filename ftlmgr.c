@@ -221,7 +221,7 @@ void ftl_write(int lsn, char *sectorbuf)
 		memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,strlen((char*)sparebuf));
 		//for(int i=0;i<PAGE_SIZE;i++)//debug
 		  //  printf("%d ",pagebuf[i]);
-		dd_write(fpsn,pagebuf);//써야할자리에 write
+		dd_write(fppn,pagebuf);//써야할자리에 write
 		printf("\nfppn:%d\n",fppn);
 
 		cur_psn=fppn+1;
