@@ -121,10 +121,12 @@ void ftl_write(int lsn, char *sectorbuf)
 //	memset(sparebuf,0xFF,SPARE_SIZE);
 	//인자로 받은 sectorbuf pagebuf에 복사
         memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
-	memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,strlen((char*)sparebuf));
+	memset(sparebuf+8,0xFF,SPARE_SIZE-8);
+	memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,SPARE_SIZE);
 	printf("\nCUR:%d\n",cur_psn);
 	psn=cur_psn*PAGES_PER_BLOCK+remain;
 	dd_write(psn,pagebuf);
+	printf("\npsn:%d\n",psn);
 	//for(int i=0;i<PAGE_SIZE;i++)//debug
 	 //  printf("%d ",pagebuf[i]);
 //		for(int i=0;i<SPARE_SIZE;i++)//debug
@@ -187,14 +189,18 @@ void ftl_write(int lsn, char *sectorbuf)
 		//memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,strlen((char*)sparebuf));
 		//dd_write(fppn,pagebuf);//freeblock write
 		int fpsn;
-		remain=lsn%PAGES_PER_BLOCK;
-		fpsn=fppn*PAGES_PER_BLOCK+remain;
+		int fpbn=fppn/PAGES_PER_BLOCK;
+		//remain=fppn%PAGES_PER_BLOCK;
+		//fpsn=fpbn*PAGES_PER_BLOCK+remain;
 		printf("\ncur:%d\n ",cur_psn);
 		
 		psn = addTable[1][lsn];
 		addTable[2][psn]=0; // invlaid page
 		addTable[2][fppn]=1;
 		addTable[1][lsn]=fppn;
+		remain=lsn%PAGES_PER_BLOCK;
+		fpsn=fppn*PAGES_PER_BLOCK+remain;
+		printf("\nfpsn:%d\n",fpsn);
 		//sparebuf[fppn]=lsn;
 		memset(sparebuf,0xFF,SPARE_SIZE);
 		sprintf(sparebuf,"%d",fppn);
@@ -202,8 +208,12 @@ void ftl_write(int lsn, char *sectorbuf)
 		memset((char*)pagebuf,0XFF,PAGE_SIZE);
 		//인자로 받은 sectorbuf pagebuf에 복사
 		memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
+		memset((char*)sparebuf+8,0XFF,SPARE_SIZE-8);
 		memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,strlen((char*)sparebuf));
+		for(int i=0;i<PAGE_SIZE;i++)//debug
+		    printf("%d ",pagebuf[i]);
 		dd_write(fpsn,pagebuf);//써야할자리에 write
+		printf("\nfpsn:%d\n",fpsn);
 
 		cur_psn=fppn+1;
 		if(cur_psn==DATABLKS_PER_DEVICE*PAGES_PER_BLOCK)
@@ -270,6 +280,7 @@ void ftl_write(int lsn, char *sectorbuf)
 		    memset((char*)pagebuf,0xFF,PAGE_SIZE);
 		    //인자로 받은 sectorbuf pagebuf에 복사
 		    memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
+		    memset((char*)sparebuf,0XFF,SPARE_SIZE-8);
 		    memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,strlen((char*)sparebuf));
 		    
 //	    pbn=psn/PAGES_PER_BLOCK;
