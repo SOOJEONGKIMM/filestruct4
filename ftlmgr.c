@@ -259,7 +259,7 @@ void ftl_write(int lsn, char *sectorbuf)
 		for(int i=0;i<PAGES_PER_BLOCK;i++){
 		    //copy valid page
 		    if(addTable[2][j*PAGES_PER_BLOCK+i] ==1){
-			dd_read(pbn*PAGES_PER_BLOCK+i,pagebuf);
+			dd_read(j*PAGES_PER_BLOCK+i,pagebuf);
 			dd_write(DATABLKS_PER_DEVICE*PAGES_PER_BLOCK+i,pagebuf);
 		    }
 		}
@@ -269,34 +269,42 @@ void ftl_write(int lsn, char *sectorbuf)
 		    //recopy valid page
 		    if(addTable[2][j*PAGES_PER_BLOCK+i] ==1){
 			dd_read(DATABLKS_PER_DEVICE*PAGES_PER_BLOCK+i,pagebuf);
-			dd_write(pbn*PAGES_PER_BLOCK+i,pagebuf);
+			dd_write(j*PAGES_PER_BLOCK+i,pagebuf);
 		    }
 		    if(addTable[2][j*PAGES_PER_BLOCK+i]==0)
 			addTable[2][j*PAGES_PER_BLOCK+i]=-1;
 		}
 
 	    }
-	    
+	    int full=1;
 	    for(int i=0;i<PAGES_PER_BLOCK*DATABLKS_PER_DEVICE;i++){
 		if(addTable[2][i]==-1){
 		    psn = i;
+		    full=0;
+		    break;
 		}
 	    }
-	    addTable[1][psn]=lsn;
-	    addTable[2][lsn]=1;
+	    if(full==0){
+		addTable[1][psn]=lsn;
+		addTable[2][lsn]=1;
 		    //sparebuf[0]=(char)(DATABLKS_PER_DEVICE*PAGES_PER_BLOCK+i);
 		    sprintf(sparebuf,"%d",lsn);
 		    memset((char*)pagebuf,0xFF,PAGE_SIZE);
 		    //인자로 받은 sectorbuf pagebuf에 복사
 		    memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
-		    memset((char*)sparebuf,0XFF,SPARE_SIZE-8);
+		    memset((char*)sparebuf+8,0XFF,SPARE_SIZE-8);
 		    memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,strlen((char*)sparebuf));
 		    
 //	    pbn=psn/PAGES_PER_BLOCK;
 //	    ppn=pbn*PAGES_PER_BLOCK+remain;
 //	    remain=lsn%PAGES_PER_BLOCK;
     //	dd_write(pbn*PAGES_PER_BLOCK+i,pagebuf);
-	    dd_write(psn,pagebuf);
+		dd_write(psn,pagebuf);
+	    }
+	    else{
+		printf("WARNING: MEMORY IS FULL!");
+		return;
+	    }
 	}
     }
 }
