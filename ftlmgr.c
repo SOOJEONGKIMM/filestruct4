@@ -126,6 +126,8 @@ void ftl_write(int lsn, char *sectorbuf)
 	dd_write(psn,pagebuf);
 	//for(int i=0;i<PAGE_SIZE;i++)//debug
 	 //  printf("%d ",pagebuf[i]);
+//		for(int i=0;i<SPARE_SIZE;i++)//debug
+//		    printf("%d ",sparebuf[i]);
 
 	addTable[1][lsn]=cur_psn++;
 	if(cur_psn==DATABLKS_PER_DEVICE*PAGES_PER_BLOCK)
@@ -139,30 +141,37 @@ void ftl_write(int lsn, char *sectorbuf)
 	exist=1;
 	//spare에 적혀있는 맵핑번호 비교확인 위해 
 	char tmppage[PAGE_SIZE];
-	memset((char*)sparebuf,0XFF,SPARE_SIZE);
-	memset((char*)tmppage,0xFF,PAGE_SIZE);
-	dd_read(psn-remain,tmppage); 
-	for(int i=0;i<PAGE_SIZE;i++)//debug
-	   printf("%d ",tmppage[i]);
-	memcpy((char*)sparebuf,(char*)(tmppage+SECTOR_SIZE),strlen((char*)sparebuf));
-	for(int i=0;i<SPARE_SIZE;i++)//debug
-	   printf("%d ",sparebuf[i]);
-	//spare에 있는 맵핑번호 확인하기 위해 복사.
-	memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
 	//memcpy((char*)sparebuf,(char*)(pagebuf+SECTOR_SIZE),SPARE_SIZE);
 	while(fppn < DATABLKS_PER_DEVICE*PAGES_PER_BLOCK){
 	    for(int i=0;i<PAGES_PER_BLOCK;i++){
-		dd_read(fppn*PAGES_PER_BLOCK+i,pagebuf);
+		memset((char*)tmppage,0xFF,PAGE_SIZE);
+		//dd_read(psn-remain,tmppage); 
+		dd_read(fppn*PAGES_PER_BLOCK+i,tmppage);
+		//printf("(fppn:%d)",fppn);
+		//for(int i=0;i<PAGE_SIZE;i++)//debug
+		  //  printf("%d ",tmppage[i]);
+	//dd_read(psn-remain,tmppage); 
+		for(int i=0;i<SPARE_SIZE;i++)//debug
+		     printf("%d ",sparebuf[i]);
+		memset((char*)sparebuf,0XFF,SPARE_SIZE);
+		memcpy((char*)sparebuf,(char*)(tmppage+SECTOR_SIZE),strlen((char*)sparebuf));
+	//spare에 있는 맵핑번호 확인하기 위해 복사.
+		//memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
 		exist=0;
+		char initt=0xFF;
 		for(int j=0;j<PAGES_PER_BLOCK;j++){
-		    if(strcmp(sparebuf,"-1")){//if not -1, 이미 매핑된경우
+		    if(strncmp(sparebuf,&initt,1)){//if not -1, 이미 매핑된경우
+			printf("here");
 			exist=1;
 			break;
 		    }
+		    else if(!strncmp(sparebuf,&initt,1))
+			exist=0;
 		}
 		if(exist==1)
 		    break;
 	    }
+	    printf(" %d=E ",exist);
 	    //free block찾은 후 기존데이터를 free block에 백업
 	    //또한 아직 매핑되지않은 ppn인 경우 
 	    //if((exist==0)&&(!strcmp(sparebuf,"-1"))){
@@ -215,6 +224,7 @@ void ftl_write(int lsn, char *sectorbuf)
 	    //free block아니면 계속 찾기
 	    else
 		fppn++;
+		printf("\nFPPN:%d ",fppn);//debug
 	}
 	//(while문 다 돌았는데 여전히 못 찾음)
 	//flashmemory이 다 차서 freeblock이 없는 경우라 garbage block할당필요
