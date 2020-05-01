@@ -109,7 +109,7 @@ void ftl_write(int lsn, char *sectorbuf)
     
     //cur_psn은 맵핑실행순서와 같음..
     //최초 쓰기 작업 수행인 경우(free block) 
-    if(addTable[1][lsn]==-1){//psn 할당 전
+    if(addTable[2][lsn]==-1){//psn 할당 전
 	exist=0;
 	//lpn=lbn*PAGES_PER_BLOCK+remain;
 	
@@ -123,18 +123,19 @@ void ftl_write(int lsn, char *sectorbuf)
         memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
 	memset(sparebuf+8,0xFF,SPARE_SIZE-8);
 	memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,SPARE_SIZE);
-	printf("\nCUR:%d\n",cur_psn);
-	psn=cur_psn*PAGES_PER_BLOCK+remain;
-	dd_write(psn,pagebuf);
+	//printf("\nCUR:%d\n",cur_psn);
+	//psn=lsn*PAGES_PER_BLOCK+remain;
+	dd_write(lsn,pagebuf);
 	printf("\npsn:%d\n",psn);
 	//for(int i=0;i<PAGE_SIZE;i++)//debug
 	 //  printf("%d ",pagebuf[i]);
 //		for(int i=0;i<SPARE_SIZE;i++)//debug
 //		    printf("%d ",sparebuf[i]);
 
-	addTable[1][lsn]=cur_psn++;
-	if(cur_psn==DATABLKS_PER_DEVICE*PAGES_PER_BLOCK)
-	    cur_psn=0;
+	addTable[1][lsn]=lsn;
+	addTable[2][lsn]=1;
+	//if(cur_psn==DATABLKS_PER_DEVICE*PAGES_PER_BLOCK)
+	  //  cur_psn=0;
 	printf("FIRST WRITE IN FREEBLOCK\n");
 	return;
     }//ppn 이미 할당되었고 페이지에 이미 데이터 존재한다면 update로 갱신
@@ -150,7 +151,7 @@ void ftl_write(int lsn, char *sectorbuf)
 		memset((char*)tmppage,0xFF,PAGE_SIZE);
 		//dd_read(psn-remain,tmppage); 
 		dd_read(fppn*PAGES_PER_BLOCK+i,tmppage);
-		//printf("(fppn:%d)",fppn);
+		printf("(fppn:%d)",fppn);
 		//for(int i=0;i<PAGE_SIZE;i++)//debug
 		  //  printf("%d ",tmppage[i]);
 	//dd_read(psn-remain,tmppage); 
@@ -198,8 +199,8 @@ void ftl_write(int lsn, char *sectorbuf)
 		addTable[2][psn]=0; // invlaid page
 		addTable[2][fppn]=1;
 		addTable[1][lsn]=fppn;
-		remain=lsn%PAGES_PER_BLOCK;
-		fpsn=fppn*PAGES_PER_BLOCK+remain;
+//		remain=lsn%PAGES_PER_BLOCK;
+//		fpsn=fppn*PAGES_PER_BLOCK+remain;
 		printf("\nfpsn:%d\n",fpsn);
 		//sparebuf[fppn]=lsn;
 		memset(sparebuf,0xFF,SPARE_SIZE);
@@ -210,14 +211,14 @@ void ftl_write(int lsn, char *sectorbuf)
 		memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
 		memset((char*)sparebuf+8,0XFF,SPARE_SIZE-8);
 		memcpy((char*)(pagebuf+SECTOR_SIZE),(char*)sparebuf,strlen((char*)sparebuf));
-		for(int i=0;i<PAGE_SIZE;i++)//debug
-		    printf("%d ",pagebuf[i]);
-		dd_write(fpsn,pagebuf);//써야할자리에 write
+		//for(int i=0;i<PAGE_SIZE;i++)//debug
+		  //  printf("%d ",pagebuf[i]);
+		dd_write(fppn,pagebuf);//써야할자리에 write
 		printf("\nfpsn:%d\n",fpsn);
 
-		cur_psn=fppn+1;
-		if(cur_psn==DATABLKS_PER_DEVICE*PAGES_PER_BLOCK)
-		    cur_psn=0;
+	//	cur_psn=fppn+1;
+	//	if(cur_psn==DATABLKS_PER_DEVICE*PAGES_PER_BLOCK)
+	//	    cur_psn=0;
 		return;
 	    }
 	    //free block아니면 계속 찾기
@@ -296,7 +297,7 @@ void ftl_print()
 {
     printf("lpn ppn\n");
     for(int i=0;i<DATABLKS_PER_DEVICE*PAGES_PER_BLOCK;i++){
-	printf("%d  %d\n",i,addTable[1][i]);
+	printf("%d  %d  %d\n",i,addTable[1][i],addTable[2][i]);
     }
     printf("free block's pbn=%d\n",DATABLKS_PER_DEVICE);
 
