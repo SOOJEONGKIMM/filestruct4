@@ -57,11 +57,17 @@ void ftl_read(int lsn, char *sectorbuf)
     int psn=addTable[1][lsn];
     //lpn=lsn동일.
     int remain=lsn%PAGES_PER_BLOCK; //remainder
+    char sparebuf[SPARE_SIZE];
     memset(pagebuf,0xFF,PAGE_SIZE);
     memset(sectorbuf,0xFF,SECTOR_SIZE);
+    if(addTable[1][lsn]==-1){
+	fprintf(stderr,"no data in %d sector",lsn);
+	return;
+    }
     dd_read(psn,pagebuf);
-    strncpy(sectorbuf,pagebuf,SECTOR_SIZE);
+    strncpy(sectorbuf, pagebuf, sizeof(char) * SECTOR_SIZE);
 
+	
     return;
 }
  
@@ -75,7 +81,7 @@ void ftl_write(int lsn, char *sectorbuf)
     int remain=lsn%PAGES_PER_BLOCK;
     int exist=1;//freeblock인지아닌지 판단위한 플래그
     int pbn,ppn,psn;
-    printf("\nFTL_WRITE() CALLED\n");
+    //printf("\nFTL_WRITE() CALLED\n");
 
     memset(pagebuf,0xFF,PAGE_SIZE);
     memset(sparebuf,0xFF,SPARE_SIZE);
@@ -93,11 +99,11 @@ void ftl_write(int lsn, char *sectorbuf)
 
 	addTable[1][lsn]=lsn;
 	addTable[2][lsn]=1;
-	printf("FIRST WRITE IN FREEBLOCK\n");
+	//printf("FIRST WRITE IN FREEBLOCK\n");
 	return;
     }//ppn 이미 할당되었고 페이지에 이미 데이터 존재한다면 update로 갱신
     else if(addTable[1][lsn]!=-1||addTable[2][lsn]==1){//finding freeblock...플래그로 표시
-	printf("FINDING FREEBLOCK...\n");
+	//printf("FINDING FREEBLOCK...\n");
 	int fppn=0;//freeblock위치사용위해 
 	//spare에 적혀있는 맵핑번호 비교확인 위해 
 	char tmppage[PAGE_SIZE];
@@ -110,15 +116,15 @@ void ftl_write(int lsn, char *sectorbuf)
 	    //free block찾은 후 기존데이터를 free block에 백업
 	    //또한 아직 매핑되지않은 ppn인 경우 
 	    if(exist==0){
-		printf("FOUND FREEBLOCK AND WRITES\n");
-		printf("\nFPPN:%d\n ",fppn);//debug
+		//printf("FOUND FREEBLOCK AND WRITES\n");
+		//printf("\nFPPN:%d\n ",fppn);//debug
 		//int fpsn;
 		//int fpbn=fppn/PAGES_PER_BLOCK;
 		
 		psn = addTable[1][lsn];
 		addTable[2][psn]=0; // invlaid page
 		addTable[2][fppn]=1;
-		printf("\nDEBUG:%d lsn is invalid,so [2][%d]=1 \n",lsn,fppn);
+		//printf("\nDEBUG:%d lsn is invalid,so [2][%d]=1 \n",lsn,fppn);
 		addTable[1][lsn]=fppn;
 		//remain=lsn%PAGES_PER_BLOCK;
 		//fpsn=fppn*PAGES_PER_BLOCK+remain;
@@ -141,7 +147,7 @@ void ftl_write(int lsn, char *sectorbuf)
 	//(while문 다 돌았는데 여전히 못 찾음)
 	//flashmemory이 다 차서 freeblock이 없는 경우라 garbage block할당필요
 	if((exist==1)&&(addTable[1][lsn]!=-1)){
-	    printf("ENTERED GARBAGE\n");
+	    //printf("ENTERED GARBAGE\n");
 	    pbn=psn/PAGES_PER_BLOCK;
 	    ppn=pbn*PAGES_PER_BLOCK+remain;
 	    for(int j=0;j<DATABLKS_PER_DEVICE;j++){
