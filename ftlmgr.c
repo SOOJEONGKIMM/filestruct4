@@ -124,7 +124,7 @@ void ftl_write(int lsn, char *sectorbuf)
 		//fpsn=fppn*PAGES_PER_BLOCK+remain;
 		sparebuf[fppn]=lsn;
 		memset(sparebuf,0xFF,SPARE_SIZE);
-		sprintf(sparebuf,"%d",fppn);//***근데 이 경우 스페어에 lsn쓰는건지 잘모르겠음
+		sprintf(sparebuf,"%d",lsn);//***근데 이 경우 스페어에 lsn쓰는건지 잘모르겠음
 		memset((char*)pagebuf,0XFF,PAGE_SIZE);
 		//인자로 받은 sectorbuf pagebuf에 복사
 		memcpy((char*)pagebuf,(char*)sectorbuf,strlen((char*)sectorbuf));
